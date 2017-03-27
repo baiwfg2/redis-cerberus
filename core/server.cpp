@@ -46,13 +46,17 @@ void Server::on_events(int events)
 
 void Server::_push_to_buffer_set()
 {
+	bool f = false;
     auto now = Clock::now();
     for (util::sref<DataCommand> c: this->_commands) {
         this->_sent_commands.push_back(c);
         this->_output_buffer_set.append(c->buffer);
         c->sent_time = now;
+		f = true;
     }
     this->_commands.clear();
+	if (f)
+		LOG(WARNING) << str() << " push _commands to _sent_commands done";
 }
 
 void Server::_recv_from()
@@ -74,11 +78,14 @@ void Server::_recv_from()
     }
     LOG(DEBUG) << "+responses size: " << responses.size();
     LOG(DEBUG) << "+rest buffer: " << this->_buffer.size();
+
     auto cmd_it = this->_sent_commands.begin();
     auto now = Clock::now();
     for (util::sptr<Response>& rsp: responses) {
         util::sref<DataCommand> c = *cmd_it++;
         if (c.not_nul()) {
+			LOG(WARNING) << "before rsp_to, cmd@" << c.id().str() << 
+				 " in " << str();
             rsp->rsp_to(c, util::mkref(*this->_proxy));
             c->resp_time = now;
         }
@@ -89,6 +96,7 @@ void Server::_recv_from()
 void Server::push_client_command(util::sref<DataCommand> cmd)
 {
     _commands.push_back(cmd);
+	LOG(WARNING) << "after " << str() << " push_back cmd@" << cmd.id().str();
     cmd->group->client->add_peer(this);
 }
 
@@ -100,14 +108,23 @@ void Server::pop_client(Client* cli)
         {
             return cmd->group->client.is(cli);
         });
+	LOG(WARNING) << cli->str() << " exited, clean _sent_commands in " << str();
     for (util::sref<DataCommand>& cmd: this->_sent_commands) {
+		if (cmd.not_nul())
+			LOG(WARNING) << "cmd@" << cmd.id().str() << " in " << str();
         if (cmd.not_nul() &&
-            cmd->group.not_nul() &&
-            cmd->group->client.not_nul() &&
+			//这一PR没有用，再考虑其它fix
+            //cmd->group.not_nul() &&
+            //cmd->group->client.not_nul() &&
             cmd->group->client.is(cli)) {
+			LOG(WARNING) << "group null ? " << cmd->group.not_nul() << " in " << str();
+			LOG(WARNING) << "group->client null ? " << cmd->group->client.not_nul() << " in " << str();
+
             cmd.reset();
+			LOG(WARNING) << "after reset for " << cli->str();
         }
     }
+	LOG(WARNING) << str() << " exiting pop_client";
 }
 
 std::vector<util::sref<DataCommand>> Server::deliver_commands()
@@ -141,8 +158,8 @@ void Server::after_events(std::set<Connection*>&)
 
 std::string Server::str() const
 {
-    return fmt::format("Server({}@{})[{}]", this->fd,
-                       static_cast<void const*>(this), this->addr.str());
+    return fmt::format("Server({}@{})", this->fd,
+                       static_cast<void const*>(this));
 }
 
 void Server::close_conn()

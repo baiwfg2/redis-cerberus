@@ -165,12 +165,20 @@ namespace {
         explicit SingleCommandGroup(util::sref<Client> cli)
             : StatsCommandGroup(cli)
             , command(nullptr)
-        {}
+        {
+		}
+		~SingleCommandGroup() {
+			LOG(WARNING) << "~SingleCommandGroup() called,cmd@" << 
+				command.str() <<
+				" for " << client->str();
+		}
 
         SingleCommandGroup(util::sref<Client> cli, Buffer b, slot ks)
             : StatsCommandGroup(cli)
             , command(new OneSlotCommand(std::move(b), util::mkref(*this), ks))
-        {}
+        {
+			LOG(WARNING) << "cmd@" << command.str() << " created";
+		}
 
         void command_responsed()
         {

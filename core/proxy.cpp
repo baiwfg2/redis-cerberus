@@ -263,13 +263,11 @@ void Proxy::inactivate_long_conn(Connection* conn)
 
 static void poll_ctl(Proxy* p, std::map<Connection*, bool> conn_polls)
 {
-    LOG(DEBUG) << "*poll ctl " << conn_polls.size();
     for (std::pair<Connection*, bool> conn_writable: conn_polls) {
         Connection* c = conn_writable.first;
         if (c->closed()) {
             continue;
         }
-        LOG(DEBUG) << " poll ctl " << c->str();
         if (conn_writable.second) {
             p->poll_rw(c);
         } else {
@@ -280,7 +278,7 @@ static void poll_ctl(Proxy* p, std::map<Connection*, bool> conn_polls)
 
 void Proxy::handle_events(poll::pevent events[], int nfds)
 {
-    LOG(DEBUG) << "*poll wait: " << nfds;
+    LOG(DEBUG) << "*poll nfds: " << nfds;
     std::set<Connection*> active_conns;
     for (Connection* c: this->_inactive_long_connections) {
         c->close();
@@ -291,7 +289,7 @@ void Proxy::handle_events(poll::pevent events[], int nfds)
     cerb_global::poll_start = Clock::now();
     for (int i = 0; i < nfds; ++i) {
         Connection* conn = static_cast<Connection*>(events[i].data.ptr);
-        LOG(DEBUG) << "*poll process " << conn->str();
+        LOG(DEBUG) << "*poll " << conn->str();
         if (closed_conns.find(conn) != closed_conns.end()) {
             continue;
         }
@@ -299,12 +297,11 @@ void Proxy::handle_events(poll::pevent events[], int nfds)
         try {
             conn->on_events(events[i].events);
         } catch (IOErrorBase& e) {
-            LOG(ERROR) << "IOError: " << e.what() << " :: " << "Close " << conn->str();
+            LOG(ERROR) << "handle_events IOError: " << e.what() << " :: " << "Close " << conn->str();
             conn->on_error();
             closed_conns.insert(conn);
         }
     }
-    LOG(DEBUG) << "*poll clean";
 
     ::poll_ctl(this, std::move(this->_conn_poll_type));
     for (Connection* c: active_conns) {
@@ -348,7 +345,6 @@ void Proxy::new_client(int client_fd)
 
 void Proxy::pop_client(Client* cli)
 {
-    LOG(DEBUG) << "Pop " << cli->str();
     util::erase_if(
         this->_retrying_commands,
         [cli](util::sref<DataCommand> cmd)

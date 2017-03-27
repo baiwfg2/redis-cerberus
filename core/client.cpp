@@ -23,10 +23,12 @@ Client::Client(int fd, Proxy* p)
 
 Client::~Client()
 {
+	LOG(WARNING) << str() << " start destructing,peer size=" << _peers.size();
     for (Server* svr: this->_peers) {
         svr->pop_client(this);
     }
     this->_proxy->pop_client(this);
+	LOG(WARNING) << str() << " end destructing";
 }
 
 void Client::on_events(int events)
@@ -41,6 +43,7 @@ void Client::on_events(int events)
         if (this->closed()) {
             return;
         }
+
         if (poll::event_is_write(events)) {
             this->_write_response();
         }
@@ -54,7 +57,7 @@ void Client::on_events(int events)
         LOG(DEBUG) << "Dump buffer " << this->_buffer.to_string();
         return this->close();
     } catch (IOErrorBase& e) {
-        LOG(DEBUG) << "IOError: " << e.what() << " :: Close " << this->str();
+        LOG(DEBUG) << "client::on_events IOError: " << e.what() << " :: Close " << this->str();
         return this->close();
     }
 }
@@ -62,6 +65,7 @@ void Client::on_events(int events)
 void Client::after_events(std::set<Connection*>&)
 {
     if (this->closed()) {
+		LOG(WARNING) << str() << " closed. delete it";
         delete this;
     }
 }
@@ -78,7 +82,9 @@ void Client::_send_buffer_set()
             g->collect_stats(this->_proxy);
         }
         this->_ready_groups.clear();
-        this->_peers.clear();
+		LOG(WARNING) << "before clear peer,size=" << _peers.size();
+        if (_awaiting_groups.empty())
+			this->_peers.clear();
         if (!this->_parsed_groups.empty()) {
             _process();
         }
@@ -99,6 +105,7 @@ void Client::_push_awaitings_to_ready()
         this->_ready_groups.push_back(std::move(g));
     }
     this->_awaiting_groups.clear();
+	LOG(WARNING) << "in rsp_to, clear _awaiting_groups";
     if (!this->_output_buffer_set.empty()) {
         this->_proxy->set_conn_poll_rw(this);
     }
@@ -127,7 +134,9 @@ void Client::_read_request()
     ::split_client_command(this->_buffer, util::mkref(*this));
     if (this->_awaiting_groups.empty()) {
         this->_process();
-    }
+    }else {
+		LOG(ERROR) << str() << " _awaiting_groups still not-empty";
+	}
 }
 
 void Client::reactivate(util::sref<Command> cmd)
@@ -167,6 +176,7 @@ void Client::_process()
     }
 
     if (0 < this->_awaiting_count) {
+		LOG(WARNING) << "in _process() peer,size=" << _peers.size();
         for (Server* svr: this->_peers) {
             this->_proxy->set_conn_poll_rw(svr);
         }
@@ -185,6 +195,7 @@ void Client::group_responsed()
 void Client::add_peer(Server* svr)
 {
     this->_peers.insert(svr);
+	LOG(WARNING) << str() << " add peer " << svr->str();
 }
 
 void Client::push_command(util::sptr<CommandGroup> g)
